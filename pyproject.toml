@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hmm"
+name = "latentflow"
 version = "0.1.0"
-description = "Hidden Markov Models"
+description = "Latent Variable Models"
 readme = "README.md"
 requires-python = ">=3.13"
 license = { file = "LICENSE" }
@@ -20,8 +20,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/iamsikun/hmm"
-Repository = "https://github.com/iamsikun/hmm"
+Homepage = "https://github.com/iamsikun/latentflow"
+Repository = "https://github.com/iamsikun/latentflow"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

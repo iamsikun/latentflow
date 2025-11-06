@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import numpy as np 
 
-from hmm.params import GaussianHMMParams
+from latentflow.params import GaussianHMMParams
 
 
 # ------------------------------
