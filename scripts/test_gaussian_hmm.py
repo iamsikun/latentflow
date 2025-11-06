@@ -6,9 +6,9 @@ src_path = Path(__file__).parent.parent / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from hmm.sampler import make_random_gaussian_hmm, sample_gaussian_hmm
-from hmm.models.hmm import GaussianHMM
-from hmm.visualize import plot_hmm_series_with_states, plot_faceted_hmm_series_with_states
+from latentflow.sampler import make_random_gaussian_hmm, sample_gaussian_hmm
+from latentflow.models.hmm import GaussianHMM
+from latentflow.visualize import plot_hmm_series_with_states, plot_faceted_hmm_series_with_states
 
 
 if __name__ == "__main__":

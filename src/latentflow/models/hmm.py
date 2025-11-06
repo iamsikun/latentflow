@@ -8,9 +8,9 @@ from typing import List, Sequence, Tuple, Optional, Any
 
 from sklearn.cluster import KMeans
 
-from hmm.utils import _check_random_state
-from hmm.params import GaussianHMMParams
-from hmm.sampler import sample_gaussian_hmm
+from latentflow.utils import _check_random_state
+from latentflow.params import GaussianHMMParams
+from latentflow.sampler import sample_gaussian_hmm
 
 def _logsumexp(a: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
     m = np.max(a, axis=axis, keepdims=True)
