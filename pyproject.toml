@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hmm"
+version = "0.1.0"
+description = "Hidden Markov Models"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "Sikun Xu", email = "xusikun96@gmail.com" }]
+dependencies = [
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.16.3",
+    "seaborn>=0.13.2",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "jupyterlab>=4.4.10",
+    "notebook>=7.4.7",
+    "pytest>=8.4.2",
+]
