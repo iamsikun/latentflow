@@ -32,10 +32,10 @@ def _check_simplex(p: np.ndarray, atol: float = 1e-8) -> None:
 
 @dataclass
 class GaussianHMMParams:
-    start_probs: np.ndarray           # (n_states,)
-    trans_mat: np.ndarray    # (n_states, n_states)
-    means: np.ndarray        # (n_states, n_features)
-    covars: np.ndarray       # (n_states, n_features, n_features)
+    start_probs: np.ndarray  # (n_states,)
+    trans_mat: np.ndarray  # (n_states, n_states)
+    means: np.ndarray  # (n_states, n_features)
+    covars: np.ndarray  # (n_states, n_features, n_features) or (n_states, n_features)
 
     @property
     def n_states(self) -> int:
@@ -65,3 +65,55 @@ class GaussianHMMParams:
             raise ValueError("covars must have square (n_features x n_features) blocks.")
         if self.covars.shape[1] != self.means.shape[1]:
             raise ValueError("means and covars have inconsistent n_features.")
+
+
+@dataclass
+class GaussianARHMMParams:
+    start_probs: np.ndarray  # (n_states,)
+    trans_mat: np.ndarray  # (n_states, n_states)
+    coeffs: np.ndarray  # (n_states, n_features, order * n_features + 1)
+    covars: np.ndarray  # (n_states, n_features, n_features) or (n_states, n_features)
+    order: int
+
+    @property
+    def n_states(self) -> int:
+        return self.start_probs.shape[0]
+
+    @property
+    def n_features(self) -> int:
+        return self.coeffs.shape[1]
+
+    def __post_init__(self) -> None:
+        self.start_probs = np.asarray(self.start_probs, dtype=float)
+        self.trans_mat = np.asarray(self.trans_mat, dtype=float)
+        self.coeffs = np.asarray(self.coeffs, dtype=float)
+        self.covars = np.asarray(self.covars, dtype=float)
+
+        if not isinstance(self.order, int) or self.order < 0:
+            raise ValueError("order must be a non-negative integer")
+
+        _check_simplex(self.start_probs)
+        _check_row_stochastic(self.trans_mat)
+
+        n_states = self.trans_mat.shape[0]
+        if self.start_probs.shape[0] != n_states:
+            raise ValueError("start_probs and trans_mat have inconsistent n_states.")
+        if self.coeffs.shape[0] != n_states or self.covars.shape[0] != n_states:
+            raise ValueError("coeffs/covars and trans_mat have inconsistent n_states.")
+
+        if self.coeffs.ndim != 3:
+            raise ValueError("coeffs must have shape (n_states, n_features, order * n_features + 1).")
+        if self.covars.ndim not in (2, 3):
+            raise ValueError("covars must have shape (n_states, n_features) or (n_states, n_features, n_features).")
+
+        n_features = self.coeffs.shape[1]
+        if self.covars.shape[1] != n_features:
+            raise ValueError("coeffs and covars have inconsistent n_features.")
+        if self.covars.ndim == 3 and self.covars.shape[1] != self.covars.shape[2]:
+            raise ValueError("covars must have square (n_features x n_features) blocks when full covariance is used.")
+
+        expected_width = self.order * n_features + 1
+        if self.coeffs.shape[2] != expected_width:
+            raise ValueError(
+                "The last dimension of coeffs must equal order * n_features + 1 (for intercept)."
+            )
