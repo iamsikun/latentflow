@@ -1,3 +1,13 @@
-from .hmm import GaussianHMM, GaussianARHMM
+from .hmm import (
+    GaussianARHMM,
+    GaussianHMM,
+    GMMARHMM,
+    GMMHMM,
+)
 
-__all__ = ["GaussianHMM", "GaussianARHMM"]
+__all__ = [
+    "GaussianHMM",
+    "GaussianARHMM",
+    "GMMHMM",
+    "GMMARHMM",
+]
