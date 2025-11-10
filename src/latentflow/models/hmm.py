@@ -1476,6 +1476,62 @@ class GMMARHMM:
         if self.params is None:
             raise RuntimeError("Model is not fitted yet. Call fit() first.")
 
+    def _init_params(
+        self,
+        sequences: List[np.ndarray],
+        n_features: int,
+        rng: np.random.Generator,
+    ) -> Dict[str, np.ndarray]:
+        n_states = self.n_components
+        n_mix = self.n_mixtures
+        width = self.order * n_features + 1
+
+        start_probs = np.ones(n_states, dtype=float) / n_states
+        start_probs = start_probs + rng.random(n_states) * 1e-3
+        start_probs = normalize(start_probs)
+
+        trans_mat = rng.random((n_states, n_states)) + np.eye(n_states) * n_states
+        trans_mat /= trans_mat.sum(axis=1, keepdims=True)
+
+        X_all = np.vstack(sequences)
+
+        n_clusters = n_states * n_mix
+        if self.init == "kmeans" and len(X_all) >= n_clusters:
+            km = KMeans(
+                n_clusters=n_clusters,
+                n_init=10,
+                random_state=int(rng.integers(0, 2**32 - 1)),
+            )
+            km.fit(X_all)
+            centers = km.cluster_centers_.astype(float)
+        else:
+            replace = len(X_all) < n_clusters
+            idx = rng.choice(len(X_all), size=n_clusters, replace=replace)
+            centers = X_all[idx].astype(float)
+
+        weights = np.ones((n_states, n_mix), dtype=float) / n_mix
+
+        coeffs = np.zeros((n_states, n_mix, n_features, width), dtype=float)
+        coeffs[:, :, :, -1] = centers.reshape(n_states, n_mix, n_features)
+
+        if self.covariance_type == "full":
+            covars = np.zeros((n_states, n_mix, n_features, n_features), dtype=float)
+            global_cov = np.cov(X_all.T, bias=True) + self.reg_covar * np.eye(n_features)
+            for k in range(n_states):
+                for m in range(n_mix):
+                    covars[k, m] = global_cov.copy()
+        else:
+            var = np.var(X_all, axis=0) + self.reg_covar
+            covars = np.tile(var, (n_states, n_mix, 1))
+
+        return {
+            "start_probs": start_probs,
+            "trans_mat": trans_mat,
+            "weights": weights,
+            "coeffs": coeffs,
+            "covars": covars,
+        }
+
     def _design_matrix(self, seq: np.ndarray) -> np.ndarray:
         T, n_features = seq.shape
         order = self.order
