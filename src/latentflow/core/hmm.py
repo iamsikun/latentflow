@@ -8,6 +8,11 @@ import numpy as np
 
 from latentflow.utils import _check_random_state
 
+try:  # pragma: no cover - optional Cython acceleration
+    from . import _hmm_cy  # type: ignore
+except Exception:  # pragma: no cover - fallback when Cython extension missing
+    _hmm_cy = None
+
 
 def logsumexp(a: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
     """Stable log-sum-exp implementation."""
@@ -36,8 +41,10 @@ def split_sequences(X: np.ndarray, lengths: Optional[Sequence[int]]) -> List[np.
     return out
 
 
-def forward_log(start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray) -> Tuple[np.ndarray, float]:
-    """Run the forward algorithm in log-space."""
+def _forward_log_py(
+    start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray
+) -> Tuple[np.ndarray, float]:
+    """Pure Python forward algorithm implementation."""
 
     T, n_states = log_b.shape
     log_alpha = np.empty((T, n_states), dtype=float)
@@ -52,8 +59,18 @@ def forward_log(start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarra
     return log_alpha, loglik
 
 
-def backward_log(trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
-    """Run the backward algorithm in log-space."""
+def forward_log(
+    start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray
+) -> Tuple[np.ndarray, float]:
+    """Run the forward algorithm in log-space."""
+
+    if _hmm_cy is not None:
+        return _hmm_cy.forward_log(start_probs, trans_mat, log_b)
+    return _forward_log_py(start_probs, trans_mat, log_b)
+
+
+def _backward_log_py(trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
+    """Pure Python backward algorithm implementation."""
 
     T, n_states = log_b.shape
     log_beta = np.empty((T, n_states), dtype=float)
@@ -65,8 +82,16 @@ def backward_log(trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
     return log_beta
 
 
-def viterbi(start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
-    """Compute the most-likely state path via the Viterbi algorithm."""
+def backward_log(trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
+    """Run the backward algorithm in log-space."""
+
+    if _hmm_cy is not None:
+        return _hmm_cy.backward_log(trans_mat, log_b)
+    return _backward_log_py(trans_mat, log_b)
+
+
+def _viterbi_py(start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
+    """Pure Python Viterbi algorithm implementation."""
 
     T, n_states = log_b.shape
     log_start = np.log(start_probs)
@@ -85,6 +110,14 @@ def viterbi(start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray) -
     for t in range(T - 2, -1, -1):
         states[t] = int(psi[t + 1, states[t + 1]])
     return states
+
+
+def viterbi(start_probs: np.ndarray, trans_mat: np.ndarray, log_b: np.ndarray) -> np.ndarray:
+    """Compute the most-likely state path via the Viterbi algorithm."""
+
+    if _hmm_cy is not None:
+        return _hmm_cy.viterbi(start_probs, trans_mat, log_b)
+    return _viterbi_py(start_probs, trans_mat, log_b)
 
 
 def normalize(v: np.ndarray) -> np.ndarray:
