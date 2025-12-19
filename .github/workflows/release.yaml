@@ -36,7 +36,7 @@ jobs:
         # If tests fail, the workflow stops here. Safe!
 
       - name: Build package
-        run: uv build
+        run: uv build --sdist
 
       - name: Publish to PyPI
         # uv publishes using the OIDC token automatically because of 'id-token: write'
