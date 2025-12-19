@@ -1,8 +1,8 @@
-"""Command-line interface for the hmm package."""
+"""Command-line interface for the latentflow package."""
 
-from hmm.sampler import make_random_gaussian_hmm, sample_gaussian_hmm
-from hmm.models.hmm import GaussianHMM
-from hmm.visualize import plot_hmm_series_with_states
+from latentflow.models.hmm import GaussianHMM
+from latentflow.sampler import make_random_gaussian_hmm, sample_gaussian_hmm
+from latentflow.visualize import plot_hmm_series_with_states
 
 
 def main():
@@ -78,4 +78,3 @@ def sampler_main():
 
 if __name__ == "__main__":
     main()
-
