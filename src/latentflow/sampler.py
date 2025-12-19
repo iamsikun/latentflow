@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np 
 
@@ -150,7 +150,7 @@ def make_random_gaussian_hmm(
     """
     if rng is None:
         rng = np.random.default_rng()
-    pi = rng.dirichlet(np.ones(n_states))
+    pi = rng.dirichlet(np.ones(n_states))  # initial state distribution
     trans_mat = rng.dirichlet(np.ones(n_states), size=n_states)
     means = rng.normal(scale=2.0, size=(n_states, n_features))
     covars = np.stack(
@@ -400,3 +400,25 @@ def sample_gmm_arhmm(
             y[t] = rng.multivariate_normal(mean, cov)
 
     return states, y
+
+
+def sample_any_hmm(
+    params: Union[GaussianHMMParams, GaussianARHMMParams, GMMHMMParams, GMMARHMMParams],
+    T: int,
+    rng: Optional[np.random.Generator] = None,
+    s0: Optional[int] = None,
+    history: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Polymorphic dispatcher for sampling from any HMM type.
+    """
+    if isinstance(params, GaussianHMMParams):
+        return sample_gaussian_hmm(params, T, rng, s0)
+    elif isinstance(params, GMMHMMParams):
+        return sample_gmm_hmm(params, T, rng, s0)
+    elif isinstance(params, GaussianARHMMParams):
+        return sample_gaussian_arhmm(params, T, rng, s0, history)
+    elif isinstance(params, GMMARHMMParams):
+        return sample_gmm_arhmm(params, T, rng, s0, history)
+    else:
+        raise TypeError(f"Unsupported parameter type: {type(params)}")

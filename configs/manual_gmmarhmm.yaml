@@ -1,0 +1,28 @@
+model_type: GMMARHMM
+mode: manual
+params:
+  order: 1
+  start_probs: [0.5, 0.5]
+  trans_mat: 
+    - [0.8, 0.2]
+    - [0.3, 0.7]
+  # weights shape: (n_states, n_mixtures) -> (2, 2)
+  weights:
+    - [0.5, 0.5]
+    - [0.6, 0.4]
+  # coeffs shape: (n_states, n_mixtures, n_features, order * n_features + 1) -> (2, 2, 2, 3)
+  coeffs:
+    # State 0
+    - [[[0.4, 0.0, 0.0], [0.0, 0.4, 0.0]],  # Mixture 0
+       [[0.8, 0.0, 1.0], [0.0, 0.8, 1.0]]]  # Mixture 1
+    # State 1
+    - [[[-0.4, 0.0, 0.0], [0.0, -0.4, 0.0]], # Mixture 0
+       [[-0.8, 0.0, -1.0], [0.0, -0.8, -1.0]]] # Mixture 1
+  # covars shape: (n_states, n_mixtures, n_features, n_features) -> (2, 2, 2, 2)
+  covars:
+    # State 0
+    - [[[0.5, 0.0], [0.0, 0.5]], [[0.2, 0.0], [0.0, 0.2]]]
+    # State 1
+    - [[[0.5, 0.0], [0.0, 0.5]], [[0.2, 0.0], [0.0, 0.2]]]
+run_config:
+  T: 200

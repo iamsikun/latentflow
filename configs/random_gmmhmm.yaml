@@ -1,0 +1,10 @@
+model_type: GMMHMM
+mode: random
+seed: 202
+generation_config:
+  n_states: 2
+  n_features: 2
+  n_mixtures: 2
+  covariance_type: full
+run_config:
+  T: 200

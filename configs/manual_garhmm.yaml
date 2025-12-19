@@ -1,0 +1,22 @@
+model_type: GaussianARHMM
+mode: manual
+params:
+  order: 1
+  start_probs: [0.6, 0.4]
+  trans_mat: 
+    - [0.7, 0.3]
+    - [0.4, 0.6]
+  # coeffs shape: (n_states, n_features, order * n_features + 1) -> (2, 2, 3)
+  coeffs:
+    # State 0
+    - [[0.5, 0.1, 0.0],  # Feature 0: 0.5*y_{t-1,0} + 0.1*y_{t-1,1} + 0.0
+       [0.0, 0.5, 0.0]]  # Feature 1: 0.0*y_{t-1,0} + 0.5*y_{t-1,1} + 0.0
+    # State 1
+    - [[-0.5, 0.0, 1.0], # Feature 0
+       [0.0, -0.5, 1.0]] # Feature 1
+  # covars shape: (n_states, n_features, n_features) -> (2, 2, 2)
+  covars:
+    - [[0.1, 0.0], [0.0, 0.1]]
+    - [[0.2, 0.0], [0.0, 0.2]]
+run_config:
+  T: 200

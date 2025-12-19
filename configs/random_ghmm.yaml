@@ -1,0 +1,8 @@
+model_type: GaussianHMM
+mode: random
+seed: 42
+generation_config:
+  n_states: 3
+  n_features: 2
+run_config:
+  T: 200

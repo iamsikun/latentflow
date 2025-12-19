@@ -13,6 +13,9 @@ try:  # pragma: no cover - optional Cython acceleration
 except Exception:  # pragma: no cover - fallback when Cython extension missing
     _hmm_cy = None
 
+# Suppress divide by zero warnings which happen when taking log of 0 probability
+np.seterr(divide='ignore')
+
 
 def logsumexp(a: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
     """Stable log-sum-exp implementation."""
