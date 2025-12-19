@@ -1,0 +1,3 @@
+recursive-include src *.pyx
+include LICENSE
+include README.md
