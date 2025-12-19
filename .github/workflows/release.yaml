@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers only when you push a tag like v0.1.0, v1.2.3, etc.
+
+jobs:
+  build-and-publish:
+    name: Build and Publish
+    runs-on: ubuntu-latest
+    environment: pypi # Links to the environment you created in Step 2
+    permissions:
+      contents: write # Needed to create the GitHub Release
+      id-token: write # Needed for PyPI OIDC authentication
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version" # Reads from your .python-version file
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run Tests
+        run: uv run pytest
+        # If tests fail, the workflow stops here. Safe!
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        # uv publishes using the OIDC token automatically because of 'id-token: write'
+        run: uv publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          files: dist/*
+          generate_release_notes: true
