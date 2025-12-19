@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from latentflow.reporting import build_timeseries_report
 
 ArrayLike1D = Union[Sequence[float], np.ndarray]
 ArrayLike2D = Union[Sequence[Sequence[float]], np.ndarray]
@@ -337,6 +338,64 @@ def plot_faceted_hmm_series_with_states(
         fig.suptitle(title)
     fig.tight_layout()
     return fig, axes
+
+
+def build_interactive_html(
+    *,
+    x: Union[ArrayLike1D, pd.Index, pd.Series],
+    Y: Union[ArrayLike2D, pd.DataFrame, pd.Series],
+    states: Sequence[int],
+    covariate_names: Optional[Sequence[str]] = None,
+    metrics_table: Optional[Mapping[str, Union[float, str, Sequence[Union[float, str]]]]] = None,
+    title: str = "LatentFlow Results",
+    description: Optional[str] = None,
+    include_state_annotations: bool = True,
+    output_path: Optional[str] = None,
+) -> str:
+    """
+    Build an interactive HTML report that combines time-series plots, hidden state
+    shading, and optional metric tables.
+
+    Parameters
+    ----------
+    x : array-like or pandas Index/Series
+        X-axis values (e.g., timestamps).
+    Y : array-like 2D or pandas DataFrame/Series
+        Observed covariates.
+    states : Sequence[int]
+        Hidden state assignments for each time step.
+    covariate_names : Sequence[str], optional
+        Names for each covariate if Y is not a DataFrame.
+    metrics_table : Mapping[str, Any], optional
+        A mapping of metric name -> value (or list of values) to render as a table.
+    title : str
+        Title of the HTML report.
+    description : str, optional
+        Text description included above the time-series chart.
+    include_state_annotations : bool
+        Whether to shade state segments in the interactive plot.
+    output_path : str, optional
+        If provided, save the HTML to this path and return it. Otherwise, return
+        the HTML string.
+
+    Returns
+    -------
+    str
+        Path to the saved HTML (if output_path provided) or the HTML content.
+    """
+    report = build_timeseries_report(
+        x=x,
+        Y=Y,
+        states=states,
+        covariate_names=covariate_names,
+        metrics_table=metrics_table,
+        title=title,
+        description=description,
+        include_state_annotations=include_state_annotations,
+    )
+    if output_path:
+        return str(report.save(output_path))
+    return report.to_html()
 
 
 if __name__ == '__main__':
