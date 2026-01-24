@@ -1,6 +1,5 @@
 import argparse
 import sys
-import webbrowser
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 
@@ -17,8 +16,7 @@ from latentflow.analysis import ResultAnalyzer
 from latentflow.sampler import sample_any_hmm
 from latentflow.models.hmm import GaussianHMM, GaussianARHMM, GMMHMM, GMMARHMM
 from latentflow.params import GaussianHMMParams, GaussianARHMMParams, GMMHMMParams, GMMARHMMParams
-from latentflow.reporting import HTMLReport, make_timeseries_section
-from latentflow.visualize import plot_hmm_series_with_states
+from latentflow.visualize import plot_hmm_series_with_states, remap_states_by_model
 
 
 def get_model_class(params):
@@ -122,10 +120,20 @@ if __name__ == "__main__":
         ax=axes[0],
     )
 
+    true_model = model_cls(**init_kwargs)
+    true_model.params = params
+
+    matched_states = remap_states_by_model(
+        pred_states,
+        true_states,
+        pred_model=model,
+        true_model=true_model,
+    )
+
     _, axes[1] = plot_hmm_series_with_states(
         list(range(T)),
         obs,
-        pred_states,
+        matched_states,
         covariate_names=[f"cov{i+1}" for i in range(params.n_features)],
         title=f"Predicted {model_name_display} Process",
         annotate_states=False,
@@ -143,7 +151,7 @@ if __name__ == "__main__":
         plt.show()
 
     # ------------------------------------------------------------------
-    # Interactive HTML report with metrics
+    # Metrics summary
     # ------------------------------------------------------------------
     analyzer = ResultAnalyzer()
     metrics_table = {}
@@ -161,37 +169,7 @@ if __name__ == "__main__":
     if model.loglik is not None:
         metrics_table["log_likelihood"] = float(model.loglik)
 
-    report = HTMLReport(title=f"{model_name_display} Experiment Results")
-    cov_names = [f"cov{i+1}" for i in range(params.n_features)]
-
-    report.add_section(
-        make_timeseries_section(
-            title=f"True {model_name_display} Process",
-            x=list(range(T)),
-            Y=obs,
-            states=true_states,
-            covariate_names=cov_names,
-            description="Observed covariates with true hidden-state shading.",
-        )
-    )
-    report.add_section(
-        make_timeseries_section(
-            title=f"Predicted {model_name_display} Process",
-            x=list(range(T)),
-            Y=obs,
-            states=pred_states,
-            covariate_names=cov_names,
-            description="Observed covariates with predicted hidden-state shading.",
-        )
-    )
-
     if metrics_table:
-        report.add_table(metrics_table, title="Parameter & Prediction Metrics")
-
-    html_output = Path(run_config.get("html_output", Path(args.config).with_suffix(".html")))
-    saved_path = report.save(html_output)
-    print(f"Saved interactive report to {saved_path}")
-    try:
-        webbrowser.open(saved_path.resolve().as_uri())
-    except Exception as exc:  # pragma: no cover - best-effort open
-        print(f"Warning: could not open report automatically: {exc}")
+        print("Metrics:")
+        for key, value in metrics_table.items():
+            print(f"  {key}: {value}")

@@ -22,6 +22,14 @@ def _sample_categorical(p: np.ndarray, rng: np.random.Generator) -> int:
     return rng.choice(len(p), p=p)
 
 
+def _ensure_rng(rng: Union[None, int, np.random.Generator]) -> np.random.Generator:
+    if rng is None:
+        return np.random.default_rng()
+    if isinstance(rng, (int, np.integer)):
+        return np.random.default_rng(rng)
+    return rng
+
+
 def _random_psd(d: int, rng: np.random.Generator, diag_min: float = 0.3) -> np.ndarray:
     """Quick helper: generate a random positive semi-definite covariance (d x d)."""
     M = rng.normal(size=(d, d))
@@ -36,7 +44,7 @@ def _random_psd(d: int, rng: np.random.Generator, diag_min: float = 0.3) -> np.n
 def sample_gaussian_hmm(
     params: GaussianHMMParams,
     T: int,
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     s0: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -48,7 +56,7 @@ def sample_gaussian_hmm(
         Parameters of the Gaussian HMM.
     T: int
         Length of the trajectory.
-    rng: Optional[np.random.Generator]
+    rng: Optional[Union[int, np.random.Generator]]
         Random number generator.
     s0: Optional[int]
         Initial state. If None, a random state is sampled from the initial state distribution.
@@ -60,8 +68,7 @@ def sample_gaussian_hmm(
         y: np.ndarray, shape = (T, n_features)
             Observations of the trajectory.
     """
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
 
     # Initialize state and observation arrays
     states = np.empty(T, dtype=int)
@@ -89,13 +96,12 @@ def sample_gaussian_hmm(
 def sample_gmm_hmm(
     params: GMMHMMParams,
     T: int,
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     s0: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Sample a trajectory from a Gaussian mixture HMM."""
 
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
 
     states = np.empty(T, dtype=int)
     y = np.empty((T, params.n_features), dtype=float)
@@ -129,7 +135,7 @@ def sample_gmm_hmm(
 def make_random_gaussian_hmm(
     n_states: int,
     n_features: int,
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
 ) -> GaussianHMMParams:
     """
     Create a random Gaussian HMM with stable parameters.
@@ -148,8 +154,7 @@ def make_random_gaussian_hmm(
         hmm: GaussianHMMParams
             Random Gaussian HMM.
     """
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
     pi = rng.dirichlet(np.ones(n_states))  # initial state distribution
     trans_mat = rng.dirichlet(np.ones(n_states), size=n_states)
     means = rng.normal(scale=2.0, size=(n_states, n_features))
@@ -164,12 +169,11 @@ def make_random_gaussian_arhmm(
     n_states: int,
     n_features: int,
     order: int,
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
 ) -> GaussianARHMMParams:
     """Create random-but-stable parameters for an autoregressive Gaussian HMM."""
 
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
 
     if order < 0:
         raise ValueError("order must be non-negative")
@@ -200,12 +204,11 @@ def make_random_gaussian_mixture_hmm(
     n_mixtures: int,
     *,
     covariance_type: str = "full",
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
 ) -> GMMHMMParams:
     """Create random-but-stable parameters for a Gaussian mixture HMM."""
 
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
 
     if covariance_type not in {"full", "diag"}:
         raise ValueError("covariance_type must be either 'full' or 'diag'")
@@ -239,12 +242,11 @@ def make_random_gaussian_mixture_arhmm(
     n_mixtures: int,
     *,
     covariance_type: str = "full",
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
 ) -> GMMARHMMParams:
     """Create random-but-stable parameters for a Gaussian mixture ARHMM."""
 
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
 
     if order < 0:
         raise ValueError("order must be non-negative")
@@ -281,14 +283,74 @@ def make_random_gaussian_mixture_arhmm(
 def sample_gaussian_arhmm(
     params: GaussianARHMMParams,
     T: int,
-    rng: Optional[np.random.Generator] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     s0: Optional[int] = None,
     history: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Sample a trajectory from an autoregressive Gaussian HMM."""
 
-    if rng is None:
-        rng = np.random.default_rng()
+    rng = _ensure_rng(rng)
+
+    order = params.order
+    n_features = params.n_features
+
+    if history is None:
+        history_arr = np.zeros((order, n_features), dtype=float)
+    else:
+        history_arr = np.asarray(history, dtype=float)
+        if history_arr.shape != (order, n_features):
+            raise ValueError(
+                f"history must have shape ({order}, {n_features}) when provided; got {history_arr.shape}."
+            )
+
+    states = np.empty(T, dtype=int)
+    y = np.empty((T, n_features), dtype=float)
+
+    states[0] = s0 if (s0 is not None) else _sample_categorical(params.start_probs, rng)
+
+    def _design_vector(t: int) -> np.ndarray:
+        if order == 0:
+            return np.array([1.0])
+        z = np.empty(order * n_features + 1, dtype=float)
+        for lag in range(1, order + 1):
+            idx = t - lag
+            if idx >= 0:
+                prev = y[idx]
+            else:
+                prev = history_arr[order + idx]
+            start = (lag - 1) * n_features
+            z[start : start + n_features] = prev
+        z[-1] = 1.0
+        return z
+
+    for t in range(T):
+        if t > 0:
+            states[t] = _sample_categorical(params.trans_mat[states[t - 1]], rng)
+
+        z_t = _design_vector(t)
+        coeffs = params.coeffs[states[t]]
+        mean = coeffs @ z_t
+
+        cov = params.covars[states[t]]
+        if cov.ndim == 1:
+            noise = rng.normal(size=n_features) * np.sqrt(cov)
+            y[t] = mean + noise
+        else:
+            y[t] = rng.multivariate_normal(mean, cov)
+
+    return states, y
+
+
+def sample_gmm_arhmm(
+    params: GMMARHMMParams,
+    T: int,
+    rng: Optional[Union[int, np.random.Generator]] = None,
+    s0: Optional[int] = None,
+    history: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Sample a trajectory from a Gaussian mixture autoregressive HMM."""
+
+    rng = _ensure_rng(rng)
 
     order = params.order
     n_features = params.n_features

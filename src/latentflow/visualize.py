@@ -1,17 +1,70 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 
-from latentflow.reporting import build_timeseries_report
+from latentflow.dists import symmetric_kl_div
+from latentflow.matching import match_states
+from latentflow.variables import MixtureGaussian, MultivariateGaussian
 
 ArrayLike1D = Union[Sequence[float], np.ndarray]
 ArrayLike2D = Union[Sequence[Sequence[float]], np.ndarray]
 
 # ----------------------------- helpers -----------------------------
+
+def _cov_to_full(cov: np.ndarray) -> np.ndarray:
+    cov = np.asarray(cov, dtype=float)
+    if cov.ndim == 1:
+        return np.diag(cov)
+    if cov.ndim == 2:
+        return cov
+    raise ValueError("cov must be 1D (diag) or 2D (full).")
+
+
+def _get_state_variables(model: Optional[object]) -> list[object]:
+    if model is None:
+        return []
+    if not hasattr(model, "state_variables"):
+        return []
+    return list(model.state_variables())
+
+
+def remap_states_by_model(
+    states: Sequence[int],
+    true_states: Sequence[int],
+    *,
+    pred_model: Optional[object] = None,
+    true_model: Optional[object] = None,
+) -> np.ndarray:
+    """Remap predicted states to better align with true states.
+
+    Uses model state distributions, then solves a linear assignment with
+    symmetric KL divergence for compatible types.
+    """
+    true_states_arr = np.asarray(true_states)
+    states_arr = np.asarray(states)
+    if len(true_states_arr) != len(states_arr):
+        raise ValueError("true_states must have same length as states")
+
+    pred_dists = _get_state_variables(pred_model)
+    true_dists = _get_state_variables(true_model)
+    if not pred_dists or not true_dists:
+        return states_arr
+
+    res = match_states(pred_dists, true_dists, symmetric_kl_div)
+    assignment = res["assignment"]
+
+    remap = {}
+    for pred_idx, true_idx in enumerate(assignment):
+        if true_idx < 0:
+            continue
+        remap[pred_idx] = int(true_idx)
+
+    return np.array([remap.get(int(s), int(s)) for s in states_arr])
 
 def _as_numpy_1d(x: Union[ArrayLike1D, pd.Series]) -> np.ndarray:
     if hasattr(x, 'to_numpy'):
@@ -93,6 +146,35 @@ def _infer_state_colors(states: Sequence[int], state_colors: Optional[Mapping[in
     else:
         cmap = plt.get_cmap('tab20')
         return {s: cmap(i / max(1, (len(unique_states)-1))) for i, s in enumerate(unique_states)}
+
+
+def _draw_gaussian_contours(
+    ax: plt.Axes,
+    mean: np.ndarray,
+    cov: np.ndarray,
+    color: str,
+    n_std: Sequence[float] = (1.0, 2.0),
+    **kwargs
+) -> None:
+    """Draw concentric covariance contours for a Gaussian."""
+    cov = _cov_to_full(cov)
+    vals, vecs = np.linalg.eigh(cov)
+    # Sort eigenvalues in descending order
+    order = vals.argsort()[::-1]
+    vals, vecs = vals[order], vecs[:, order]
+    
+    # Angle of the largest eigenvector
+    theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
+    
+    for n in n_std:
+        width, height = 2 * n * np.sqrt(vals)
+        # Use provided color for edge, clear face
+        ell = Ellipse(
+            xy=mean, width=width, height=height, angle=theta,
+            edgecolor=color, facecolor='none', **kwargs
+        )
+        ax.add_patch(ell)
+
 
 # ----------------------------- core API -----------------------------
 
@@ -197,6 +279,8 @@ def plot_hmm_series_with_states(
         Observed covariates; if 1D, treated as a single series.
     states : Sequence[int]
         Hidden state per time step.
+        If you need to align predicted labels with ground truth, call
+        ``remap_states_by_model`` before plotting.
     covariate_names : list[str], optional
         Names for each column in Y. If Y is a DataFrame, its columns are used.
     title : str, optional
@@ -340,62 +424,127 @@ def plot_faceted_hmm_series_with_states(
     return fig, axes
 
 
-def build_interactive_html(
-    *,
-    x: Union[ArrayLike1D, pd.Index, pd.Series],
-    Y: Union[ArrayLike2D, pd.DataFrame, pd.Series],
+def plot_hmm_2d_states(
+    x: Union[ArrayLike2D, pd.DataFrame, pd.Series],
     states: Sequence[int],
-    covariate_names: Optional[Sequence[str]] = None,
-    metrics_table: Optional[Mapping[str, Union[float, str, Sequence[Union[float, str]]]]] = None,
-    title: str = "LatentFlow Results",
-    description: Optional[str] = None,
-    include_state_annotations: bool = True,
-    output_path: Optional[str] = None,
-) -> str:
-    """
-    Build an interactive HTML report that combines time-series plots, hidden state
-    shading, and optional metric tables.
+    *,
+    state_variables: Sequence[object],
+    title: Optional[str] = None,
+    feature_names: Optional[Sequence[str]] = None,
+    state_labels: Optional[Mapping[int, str]] = None,
+    state_colors: Optional[Mapping[int, str]] = None,
+    alpha: float = 0.6,
+    figsize: Tuple[float, float] = (8, 8),
+    legend: bool = True,
+    grid: bool = True,
+    ax: Optional[plt.Axes] = None,
+    std_levels: Sequence[float] = (1.0, 2.0),
+    ellipse_kwargs: Optional[dict] = None,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Plot 2D data colored by state, with optional Gaussian/GMM contours.
 
     Parameters
     ----------
-    x : array-like or pandas Index/Series
-        X-axis values (e.g., timestamps).
-    Y : array-like 2D or pandas DataFrame/Series
-        Observed covariates.
+    x : array-like 2D or DataFrame
+        Input data, must have 2 columns for x and y axes.
     states : Sequence[int]
-        Hidden state assignments for each time step.
-    covariate_names : Sequence[str], optional
-        Names for each covariate if Y is not a DataFrame.
-    metrics_table : Mapping[str, Any], optional
-        A mapping of metric name -> value (or list of values) to render as a table.
-    title : str
-        Title of the HTML report.
-    description : str, optional
-        Text description included above the time-series chart.
-    include_state_annotations : bool
-        Whether to shade state segments in the interactive plot.
-    output_path : str, optional
-        If provided, save the HTML to this path and return it. Otherwise, return
-        the HTML string.
+        State assignments for each data point.
+        If you need to align predicted labels with ground truth, call
+        ``remap_states_by_model`` before plotting.
+    state_variables : Sequence[object]
+        State distribution objects used for contours.
+    title : str, optional
+        Plot title.
+    feature_names : Sequence[str], optional
+        Names for x and y axes.
+    state_labels : Mapping[int, str], optional
+        Labels for states.
+    state_colors : Mapping[int, str], optional
+        Colors for states.
+    alpha : float
+        Alpha for scatter points.
+    figsize : Tuple[float, float]
+        Figure size.
+    legend : bool
+        Show legend.
+    grid : bool
+        Show grid.
+    ax : plt.Axes, optional
+        Existing axes to plot on.
+    std_levels : Sequence[float]
+        Standard deviations for contours (default: 1.0, 2.0).
+    ellipse_kwargs : dict, optional
+        Extra kwargs for Ellipse patches.
 
     Returns
     -------
-    str
-        Path to the saved HTML (if output_path provided) or the HTML content.
+    (fig, ax)
     """
-    report = build_timeseries_report(
-        x=x,
-        Y=Y,
-        states=states,
-        covariate_names=covariate_names,
-        metrics_table=metrics_table,
-        title=title,
-        description=description,
-        include_state_annotations=include_state_annotations,
-    )
-    if output_path:
-        return str(report.save(output_path))
-    return report.to_html()
+    y_values = _as_numpy_2d(x)
+    if y_values.shape[1] != 2:
+        raise ValueError("Input data must be 2-dimensional (2 features).")
+
+    states = np.asarray(states)
+    if len(y_values) != len(states):
+        raise ValueError("x and states must have compatible lengths.")
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+
+    palette = _infer_state_colors(states, state_colors)
+    unique_states = sorted(np.unique(states))
+
+    # Pick feature names
+    if feature_names is None:
+        if hasattr(x, 'columns'):
+            feature_names = list(map(str, x.columns))
+        else:
+            feature_names = ['Feature 1', 'Feature 2']
+    
+    if len(feature_names) != 2:
+        raise ValueError("feature_names must have length 2.")
+
+    # Scatter plot
+    for s in unique_states:
+        mask = (states == s)
+        lbl = state_labels[s] if (state_labels and s in state_labels) else f"State {s}"
+        ax.scatter(
+            y_values[mask, 0], y_values[mask, 1],
+            color=palette[s], label=lbl, alpha=alpha, edgecolors='none'
+        )
+
+    if ellipse_kwargs is None:
+        ellipse_kwargs = dict(linestyle='--', linewidth=1.5)
+
+    for s in unique_states:
+        p_idx = int(s)
+        if p_idx >= len(state_variables):
+            continue
+
+        col = palette[s]
+        rv = state_variables[p_idx]
+        if isinstance(rv, MultivariateGaussian):
+            _draw_gaussian_contours(
+                ax, rv.mean, rv.cov, col, n_std=std_levels, **ellipse_kwargs
+            )
+        elif isinstance(rv, MixtureGaussian):
+            for m, c in zip(rv.means, rv.covars):
+                _draw_gaussian_contours(
+                    ax, m, c, col, n_std=std_levels, **ellipse_kwargs
+                )
+
+    ax.set_xlabel(feature_names[0])
+    ax.set_ylabel(feature_names[1])
+    if title:
+        ax.set_title(title)
+    if grid:
+        ax.grid(True, alpha=0.3, linestyle='--')
+    if legend:
+        ax.legend(frameon=True, fancybox=True, framealpha=0.8)
+
+    return fig, ax
 
 
 if __name__ == '__main__':
@@ -413,6 +562,7 @@ if __name__ == '__main__':
 
     labels = {0: 'Baseline', 1: 'Warm', 2: 'Hot'}
 
+    # Demo 1: Time series
     fig, ax = plot_hmm_series_with_states(
         t, Y, states,
         covariate_names=['cov1', 'cov2'],
@@ -422,6 +572,7 @@ if __name__ == '__main__':
         boundary_markers=True,
     )
 
+    # Demo 2: Faceted
     fig, axes = plot_faceted_hmm_series_with_states(
         t, Y, states,
         covariate_names=['cov1', 'cov2'],
@@ -430,4 +581,18 @@ if __name__ == '__main__':
         annotate_states=True,
         boundary_markers=True,
     )
+    
+    # Demo 3: 2D Projection
+    means = np.array([Y[states==i].mean(axis=0) for i in range(3)])
+    covars = np.array([np.cov(Y[states==i], rowvar=False) for i in range(3)])
+    state_variables = [MultivariateGaussian(mu, _cov_to_full(cov)) for mu, cov in zip(means, covars)]
+
+    fig, ax = plot_hmm_2d_states(
+        Y, states,
+        state_variables=state_variables,
+        title='2D Gaussian HMM Projection',
+        state_labels=labels,
+        feature_names=['Signal 1', 'Signal 2']
+    )
+
     plt.show()

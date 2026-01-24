@@ -16,6 +16,9 @@ from latentflow import (
     sample_gmm_arhmm,
     sample_gmm_hmm,
 )
+from latentflow.matching import match_states
+from latentflow.variables import UnivariateGaussian
+from latentflow.dists import symmetric_kl_div_gaussian
 
 
 def _assert_probabilities(proba: np.ndarray) -> None:
@@ -132,4 +135,3 @@ def test_gmm_arhmm_runs_end_to_end():
     proba = model.predict_proba(obs)
     assert proba.shape == (len(obs), 2)
     _assert_probabilities(proba)
-

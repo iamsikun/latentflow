@@ -2,7 +2,7 @@
 
 from latentflow.models.hmm import GaussianHMM
 from latentflow.sampler import make_random_gaussian_hmm, sample_gaussian_hmm
-from latentflow.visualize import plot_hmm_series_with_states
+from latentflow.visualize import plot_hmm_series_with_states, remap_states_by_model
 
 
 def main():
@@ -42,8 +42,18 @@ def main():
         ax=axes[0],
     )
 
+    true_model = GaussianHMM(n_components=n_states)
+    true_model.params = hmm_params
+
+    matched_states = remap_states_by_model(
+        pred_states,
+        true_states,
+        pred_model=hmm,
+        true_model=true_model,
+    )
+
     _, axes[1] = plot_hmm_series_with_states(
-        list(range(T)), obs, pred_states,
+        list(range(T)), obs, matched_states,
         covariate_names=['cov1', 'cov2'],
         title='Predicted Gaussian HMM Process',
         annotate_states=False,

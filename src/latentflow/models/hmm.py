@@ -26,6 +26,7 @@ from latentflow.sampler import (
     sample_gmm_arhmm,
     sample_gmm_hmm,
 )
+from latentflow.variables import MixtureGaussian, MultivariateGaussian
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +184,20 @@ class GaussianHMM:
         )
 
         params_dict = dict(best_params)
+
+        # Reorder states by the first element of the mean vector
+        means = params_dict["means"]
+        # Stable sort to keep tie order deterministic across runs.
+        order = np.argsort(means[:, 0], kind="stable")
+
+        params_dict["start_probs"] = params_dict["start_probs"][order]
+        params_dict["trans_mat"] = params_dict["trans_mat"][order][:, order]
+        params_dict["means"] = params_dict["means"][order]
+        if params_dict["covars"].ndim == 3:  # full
+            params_dict["covars"] = params_dict["covars"][order]
+        else:  # diag
+            params_dict["covars"] = params_dict["covars"][order]
+
         self.params = GaussianHMMParams(
             start_probs=params_dict["start_probs"],
             trans_mat=params_dict["trans_mat"],
@@ -265,6 +280,25 @@ class GaussianHMM:
         self._check_fitted()
 
         return sample_gaussian_hmm(self.params, T, self.random_state)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _cov_to_full(cov: np.ndarray) -> np.ndarray:
+        cov = np.asarray(cov, dtype=float)
+        if cov.ndim == 1:
+            return np.diag(cov)
+        if cov.ndim == 2:
+            return cov
+        raise ValueError("cov must be 1D (diag) or 2D (full).")
+
+    def state_variables(self) -> list[MultivariateGaussian]:
+        """Return ordered state distributions as RandomVariable objects."""
+        self._check_fitted()
+        dists: list[MultivariateGaussian] = []
+        assert self.params is not None
+        for mu, cov in zip(self.params.means, self.params.covars):
+            dists.append(MultivariateGaussian(mu, self._cov_to_full(cov)))
+        return dists
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -580,6 +614,22 @@ class GaussianARHMM:
         )
 
         params_dict = dict(best_params)
+
+        # Reorder states by the first element of the intercept (coeff of 1st feature)
+        # coeffs shape: (n_states, n_features, width)
+        # intercept is at index -1 in width dim
+        intercepts = params_dict["coeffs"][:, 0, -1]
+        # Stable sort to keep tie order deterministic across runs.
+        order = np.argsort(intercepts, kind="stable")
+
+        params_dict["start_probs"] = params_dict["start_probs"][order]
+        params_dict["trans_mat"] = params_dict["trans_mat"][order][:, order]
+        params_dict["coeffs"] = params_dict["coeffs"][order]
+        if params_dict["covars"].ndim == 3:
+            params_dict["covars"] = params_dict["covars"][order]
+        else:
+            params_dict["covars"] = params_dict["covars"][order]
+
         self.params = GaussianARHMMParams(
             start_probs=params_dict["start_probs"],
             trans_mat=params_dict["trans_mat"],
@@ -979,6 +1029,22 @@ class GMMHMM:
         )
 
         params_dict = dict(best_params)
+
+        # Reorder by expected mean of first feature
+        # means: (n_states, n_mix, n_features)
+        # weights: (n_states, n_mix)
+        means = params_dict["means"]
+        weights = params_dict["weights"]
+        expected_means = np.sum(means[:, :, 0] * weights, axis=1)
+        # Stable sort to keep tie order deterministic across runs.
+        order = np.argsort(expected_means, kind="stable")
+
+        params_dict["start_probs"] = params_dict["start_probs"][order]
+        params_dict["trans_mat"] = params_dict["trans_mat"][order][:, order]
+        params_dict["weights"] = params_dict["weights"][order]
+        params_dict["means"] = params_dict["means"][order]
+        params_dict["covars"] = params_dict["covars"][order]
+
         self.params = GMMHMMParams(
             start_probs=params_dict["start_probs"],
             trans_mat=params_dict["trans_mat"],
@@ -1047,6 +1113,19 @@ class GMMHMM:
     def sample(self, T: int) -> Tuple[np.ndarray, np.ndarray]:
         self._check_fitted()
         return sample_gmm_hmm(self.params, T, self.random_state)
+
+    def state_variables(self) -> list[MixtureGaussian]:
+        """Return ordered state distributions as RandomVariable objects."""
+        self._check_fitted()
+        dists: list[MixtureGaussian] = []
+        assert self.params is not None
+        for weights, means, covars in zip(
+            self.params.weights,
+            self.params.means,
+            self.params.covars,
+        ):
+            dists.append(MixtureGaussian(weights, means, covars))
+        return dists
 
     def _check_fitted(self) -> None:
         if self.params is None:
@@ -1388,6 +1467,22 @@ class GMMARHMM:
         )
 
         params_dict = dict(best_params)
+
+        # Reorder by expected intercept of first feature
+        # coeffs: (n_states, n_mix, n_features, width)
+        coeffs = params_dict["coeffs"]
+        weights = params_dict["weights"]
+        intercepts = coeffs[:, :, 0, -1]
+        expected_intercepts = np.sum(intercepts * weights, axis=1)
+        # Stable sort to keep tie order deterministic across runs.
+        order = np.argsort(expected_intercepts, kind="stable")
+
+        params_dict["start_probs"] = params_dict["start_probs"][order]
+        params_dict["trans_mat"] = params_dict["trans_mat"][order][:, order]
+        params_dict["weights"] = params_dict["weights"][order]
+        params_dict["coeffs"] = params_dict["coeffs"][order]
+        params_dict["covars"] = params_dict["covars"][order]
+
         self.params = GMMARHMMParams(
             start_probs=params_dict["start_probs"],
             trans_mat=params_dict["trans_mat"],
@@ -1716,4 +1811,3 @@ class GMMARHMM:
             "coeffs": coeffs,
             "covars": covars,
         }
-
